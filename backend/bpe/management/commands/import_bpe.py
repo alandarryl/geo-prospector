@@ -1,65 +1,63 @@
 """
-Import du fichier parquet BPE (fichier plat) vers le modèle relationnel.
+Import du fichier parquet BPE 2025 (nettoyé) vers le modèle relationnel.
 
 Usage :
-    docker compose exec backend python manage.py import_bpe --inspect   # voir les colonnes du fichier
-    docker compose exec backend python manage.py import_bpe             # import (région du .env)
+    docker compose exec backend python manage.py import_bpe --inspect   # colonnes + valeurs de "region"
+    docker compose exec backend python manage.py import_bpe --reset     # import de la région du .env
     docker compose exec backend python manage.py import_bpe --region 28 --reset
 
-⚠️ Les noms de colonnes varient selon la version du fichier.
-   Lancez d'abord --inspect, puis ajustez COLUMN_CANDIDATES si besoin.
+Le fichier (~2,9 M lignes) est lu par paquets pour limiter la mémoire :
+seules les lignes de la région sont gardées.
 """
+import unicodedata
+
 import pandas as pd
+import pyarrow.parquet as pq
 from django.conf import settings
+from django.contrib.gis.db.models import Extent
 from django.contrib.gis.geos import Point
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from bpe.models import Commune, Domaine, Equipement, SousDomaine, TypeEquipement
 
-# Pour chaque champ logique : liste des noms de colonnes possibles (le premier trouvé est utilisé)
-COLUMN_CANDIDATES = {
-    "region": ["REG", "reg", "region"],
-    "departement": ["DEP", "dep"],
-    "code_commune": ["DEPCOM", "depcom", "CODGEO", "codgeo"],
-    "nom_commune": ["LIBCOM", "libcom", "NOMCOM", "LIBGEO"],
-    "domaine": ["DOM", "dom"],
-    "domaine_lib": ["LIB_DOM", "DOM_LIB", "lib_dom", "libelle_domaine"],
-    "sous_domaine": ["SDOM", "sdom"],
-    "sous_domaine_lib": ["LIB_SDOM", "SDOM_LIB", "lib_sdom", "libelle_sous_domaine"],
-    "type": ["TYPEQU", "typequ"],
-    "type_lib": ["LIB_TYPEQU", "TYPEQU_LIB", "lib_typequ", "libelle_type"],
-    "nom": ["NOMRS", "nomrs", "NOM"],
-    "num_voie": ["NUMVOIE", "numvoie"],
-    "type_voie": ["TYPVOIE", "typvoie"],
-    "lib_voie": ["LIBVOIE", "libvoie"],
-    "code_postal": ["CODPOS", "codpos"],
-    "longitude": ["LONGITUDE", "longitude", "lon"],
-    "latitude": ["LATITUDE", "latitude", "lat"],
-    "lambert_x": ["LAMBERT_X", "lambert_x"],
-    "lambert_y": ["LAMBERT_Y", "lambert_y"],
-    "qualite": ["QUALITE_XY", "qualite_xy"],
-    "annee": ["AN", "an", "annee"],
+# Codes région INSEE -> libellé (au cas où la colonne "region" contient le nom)
+REGIONS = {
+    "01": "Guadeloupe", "02": "Martinique", "03": "Guyane", "04": "La Réunion", "06": "Mayotte",
+    "11": "Île-de-France", "24": "Centre-Val de Loire", "27": "Bourgogne-Franche-Comté",
+    "28": "Normandie", "32": "Hauts-de-France", "44": "Grand Est", "52": "Pays de la Loire",
+    "53": "Bretagne", "75": "Nouvelle-Aquitaine", "76": "Occitanie",
+    "84": "Auvergne-Rhône-Alpes", "93": "Provence-Alpes-Côte d'Azur", "94": "Corse",
 }
 
-BATCH = 5000
+COLUMNS = ["_id", "nom", "adresse", "codepostal", "ville", "dept", "region",
+           "domaine1_code", "domaine1_libelle", "domaine2_code", "domaine2_libelle",
+           "domaine3_code", "domaine3_libelle", "SIRET", "lon", "lat"]
+
+BATCH_READ = 200_000   # lignes lues à la fois dans le parquet
+BATCH_WRITE = 5_000    # lignes insérées à la fois en base
 
 
-def resolve_columns(df_columns):
-    cols = {}
-    for key, candidates in COLUMN_CANDIDATES.items():
-        cols[key] = next((c for c in candidates if c in df_columns), None)
-    return cols
+def normalize(value):
+    """'Provence-Alpes-Côte d'Azur' -> 'provence alpes cote d azur' ; 28.0 -> '28'"""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    s = str(value).strip()
+    if s.endswith(".0"):
+        s = s[:-2]
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower()
+    for ch in "-'’_":
+        s = s.replace(ch, " ")
+    return " ".join(s.split())
 
 
-def val(row, cols, key, default=""):
-    c = cols.get(key)
-    if not c:
-        return default
-    v = row[c]
-    if v is None or (isinstance(v, float) and pd.isna(v)):
-        return default
-    return str(v).strip()
+def clean(value, max_len=None):
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    s = str(value).strip()
+    if s.endswith(".0") and s[:-2].isdigit():   # SIRET / code postal lus comme float
+        s = s[:-2]
+    return s[:max_len] if max_len else s
 
 
 class Command(BaseCommand):
@@ -67,119 +65,145 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--path", default=settings.BPE_PARQUET_PATH)
-        parser.add_argument("--region", default=settings.BPE_REGION)
+        parser.add_argument("--region", default=settings.BPE_REGION, help="Code région INSEE (ex: 28)")
         parser.add_argument("--reset", action="store_true", help="Vide les tables BPE avant import")
-        parser.add_argument("--inspect", action="store_true", help="Affiche les colonnes et 5 lignes")
+        parser.add_argument("--inspect", action="store_true", help="Affiche colonnes, types et régions")
+        parser.add_argument("--emprises", action="store_true",
+                            help="Recalcule seulement l'emprise (bbox) des communes, sans réimporter")
 
     def handle(self, *args, **opts):
-        path, region = opts["path"], str(opts["region"])
+        path = opts["path"]
         try:
-            df = pd.read_parquet(path)
+            pfile = pq.ParquetFile(path)
         except FileNotFoundError:
             raise CommandError(f"Fichier introuvable : {path} (placez-le dans ./data/)")
 
         if opts["inspect"]:
-            self.stdout.write(f"{len(df)} lignes\nColonnes : {list(df.columns)}")
-            self.stdout.write(str(df.head()))
+            return self._inspect(pfile)
+        if opts["emprises"]:
+            self._compute_emprises()
             return
 
-        cols = resolve_columns(df.columns)
-        for required in ("region", "code_commune", "domaine", "sous_domaine", "type"):
-            if not cols[required]:
-                raise CommandError(f"Colonne '{required}' introuvable. Lancez --inspect et adaptez COLUMN_CANDIDATES.")
-        if not (cols["longitude"] and cols["latitude"]) and not (cols["lambert_x"] and cols["lambert_y"]):
-            raise CommandError("Aucune colonne de coordonnées trouvée.")
+        missing = set(COLUMNS) - set(pfile.schema_arrow.names)
+        if missing:
+            raise CommandError(f"Colonnes manquantes dans le fichier : {missing}")
 
-        # 1) Filtre région
-        df = df[df[cols["region"]].astype(str).str.zfill(2) == region.zfill(2)]
-        self.stdout.write(f"{len(df)} équipements pour la région {region}")
+        code = str(opts["region"]).zfill(2)
+        # Valeurs acceptées dans la colonne "region" : le code ("28") ou le nom ("normandie")
+        accepted = {normalize(code), normalize(str(int(code))), normalize(REGIONS.get(code, ""))} - {""}
+
+        df = self._read_region(pfile, accepted)
+        self.stdout.write(f"{len(df)} équipements pour la région {code} ({REGIONS.get(code, '?')})")
         if df.empty:
-            return
+            raise CommandError("Aucune ligne trouvée : lancez --inspect pour voir les valeurs de 'region'.")
+
+        before = len(df)
+        df = df.dropna(subset=["lon", "lat", "domaine3_code", "ville"])
+        self.stdout.write(f"  {before - len(df)} lignes ignorées (sans coordonnées, type ou ville)")
+
+        df = df.rename(columns={"_id": "bpe_id"})  # "_id" n'est pas utilisable avec itertuples
 
         with transaction.atomic():
             if opts["reset"]:
+                self.stdout.write("  Suppression des anciennes données BPE...")
                 Equipement.objects.all().delete()
                 Commune.objects.all().delete()
                 TypeEquipement.objects.all().delete()
                 SousDomaine.objects.all().delete()
                 Domaine.objects.all().delete()
 
-            # 2) Tables de référence (dé-normalisation -> normalisation)
-            self._import_nomenclature(df, cols)
-            self._import_communes(df, cols, region)
-            # 3) Équipements
-            self._import_equipements(df, cols)
+            self._import_nomenclature(df)
+            communes = self._import_communes(df, REGIONS.get(code, code))
+            self._import_equipements(df, communes)
+            self._compute_emprises()
 
         self.stdout.write(self.style.SUCCESS("Import terminé ✅"))
 
-    def _import_nomenclature(self, df, cols):
-        def lib(row, key, code_key):
-            return val(row, cols, key) or val(row, cols, code_key)
+    # ------------------------------------------------------------------ #
+    def _inspect(self, pfile):
+        self.stdout.write(f"{pfile.metadata.num_rows} lignes\n")
+        self.stdout.write("Colonnes et types :")
+        for field in pfile.schema_arrow:
+            self.stdout.write(f"  - {field.name}: {field.type}")
+        regions = pfile.read(columns=["region"]).to_pandas()["region"]
+        self.stdout.write("\nValeurs de 'region' (nombre de lignes) :")
+        self.stdout.write(str(regions.value_counts(dropna=False).head(25)))
+        sample = pfile.read_row_group(0).to_pandas().head(5)
+        with pd.option_context("display.max_columns", None, "display.width", 250):
+            self.stdout.write("\nExemple :")
+            self.stdout.write(str(sample))
+
+    def _read_region(self, pfile, accepted):
+        parts = []
+        for i, batch in enumerate(pfile.iter_batches(batch_size=BATCH_READ, columns=COLUMNS)):
+            chunk = batch.to_pandas()
+            mask = chunk["region"].map(normalize).isin(accepted)
+            parts.append(chunk[mask])
+            self.stdout.write(f"  lecture... {(i + 1) * BATCH_READ:,} lignes", ending="\r")
+        self.stdout.write("")
+        return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=COLUMNS)
+
+    def _import_nomenclature(self, df):
+        def lib(row, n):
+            return clean(row[f"domaine{n}_libelle"], 255) or clean(row[f"domaine{n}_code"])
 
         doms, sdoms, types = {}, {}, {}
-        for _, row in df.drop_duplicates(subset=[cols["type"]]).iterrows():
-            d, sd, t = val(row, cols, "domaine"), val(row, cols, "sous_domaine"), val(row, cols, "type")
-            doms[d] = lib(row, "domaine_lib", "domaine")
-            sdoms[sd] = (lib(row, "sous_domaine_lib", "sous_domaine"), d)
-            types[t] = (lib(row, "type_lib", "type"), sd)
+        for _, row in df.drop_duplicates(subset=["domaine3_code"]).iterrows():
+            d, sd, t = clean(row["domaine1_code"]), clean(row["domaine2_code"]), clean(row["domaine3_code"])
+            doms[d] = lib(row, 1)
+            sdoms[sd] = (lib(row, 2), d)
+            types[t] = (lib(row, 3), sd)
 
-        Domaine.objects.bulk_create([Domaine(code=k, libelle=v) for k, v in doms.items()],
-                                    update_conflicts=True, unique_fields=["code"], update_fields=["libelle"])
-        SousDomaine.objects.bulk_create([SousDomaine(code=k, libelle=l, domaine_id=d) for k, (l, d) in sdoms.items()],
-                                        update_conflicts=True, unique_fields=["code"], update_fields=["libelle", "domaine"])
-        TypeEquipement.objects.bulk_create([TypeEquipement(code=k, libelle=l, sous_domaine_id=s) for k, (l, s) in types.items()],
-                                           update_conflicts=True, unique_fields=["code"], update_fields=["libelle", "sous_domaine"])
+        Domaine.objects.bulk_create(
+            [Domaine(code=k, libelle=v) for k, v in doms.items()],
+            update_conflicts=True, unique_fields=["code"], update_fields=["libelle"])
+        SousDomaine.objects.bulk_create(
+            [SousDomaine(code=k, libelle=l, domaine_id=d) for k, (l, d) in sdoms.items()],
+            update_conflicts=True, unique_fields=["code"], update_fields=["libelle", "domaine"])
+        TypeEquipement.objects.bulk_create(
+            [TypeEquipement(code=k, libelle=l, sous_domaine_id=s) for k, (l, s) in types.items()],
+            update_conflicts=True, unique_fields=["code"], update_fields=["libelle", "sous_domaine"])
         self.stdout.write(f"  {len(doms)} domaines, {len(sdoms)} sous-domaines, {len(types)} types")
 
-    def _import_communes(self, df, cols, region):
-        communes = []
-        for _, row in df.drop_duplicates(subset=[cols["code_commune"]]).iterrows():
-            code = val(row, cols, "code_commune")
-            communes.append(Commune(
-                code_insee=code,
-                nom=val(row, cols, "nom_commune") or code,
-                departement=val(row, cols, "departement") or code[:2],
-                region=region,
-            ))
-        Commune.objects.bulk_create(communes, update_conflicts=True, unique_fields=["code_insee"],
-                                    update_fields=["nom", "departement", "region"])
-        self.stdout.write(f"  {len(communes)} communes")
+    def _import_communes(self, df, region_label):
+        pairs = df[["ville", "dept"]].drop_duplicates()
+        Commune.objects.bulk_create(
+            [Commune(nom=clean(r.ville, 255), departement=clean(r.dept, 3), region=region_label)
+             for r in pairs.itertuples()],
+            ignore_conflicts=True)
+        mapping = {(c.nom, c.departement): c.id for c in Commune.objects.all()}
+        self.stdout.write(f"  {len(pairs)} communes")
+        return mapping
 
-    def _import_equipements(self, df, cols):
-        use_wgs84 = bool(cols["longitude"] and cols["latitude"])
-        batch, total, skipped = [], 0, 0
-        for _, row in df.iterrows():
-            try:
-                if use_wgs84:
-                    geom = Point(float(row[cols["longitude"]]), float(row[cols["latitude"]]), srid=4326)
-                else:  # Lambert 93 -> WGS84
-                    geom = Point(float(row[cols["lambert_x"]]), float(row[cols["lambert_y"]]), srid=2154)
-                    geom.transform(4326)
-            except (TypeError, ValueError):
-                skipped += 1
-                continue
-            if pd.isna(geom.x) or pd.isna(geom.y):
-                skipped += 1
-                continue
+    def _compute_emprises(self):
+        """Emprise [min_lon, min_lat, max_lon, max_lat] des équipements de chaque commune."""
+        extents = Equipement.objects.values("commune").annotate(ext=Extent("geom"))
+        by_id = {e["commune"]: [round(v, 6) for v in e["ext"]] for e in extents if e["ext"]}
+        communes = list(Commune.objects.all())
+        for c in communes:
+            c.bbox = by_id.get(c.id)
+        Commune.objects.bulk_update(communes, ["bbox"], batch_size=1000)
+        self.stdout.write(f"  emprise calculée pour {len(by_id)} communes")
 
-            adresse = " ".join(filter(None, [val(row, cols, "num_voie"), val(row, cols, "type_voie"),
-                                             val(row, cols, "lib_voie"), val(row, cols, "code_postal")]))
-            annee = val(row, cols, "annee")
+    def _import_equipements(self, df, communes):
+        batch, total = [], 0
+        for r in df.itertuples(index=False):
             batch.append(Equipement(
-                type_equipement_id=val(row, cols, "type"),
-                commune_id=val(row, cols, "code_commune"),
-                nom=val(row, cols, "nom")[:255],
-                adresse=adresse[:500],
-                qualite_geoloc=val(row, cols, "qualite")[:50],
-                annee=int(float(annee)) if annee else None,
-                geom=geom,
+                bpe_id=clean(r.bpe_id, 64),
+                type_equipement_id=clean(r.domaine3_code),
+                commune_id=communes[(clean(r.ville, 255), clean(r.dept, 3))],
+                nom=clean(r.nom, 255),
+                adresse=clean(r.adresse, 500),
+                code_postal=clean(r.codepostal, 5),
+                siret=clean(r.SIRET, 14),
+                geom=Point(float(r.lon), float(r.lat), srid=4326),
             ))
-            if len(batch) >= BATCH:
-                Equipement.objects.bulk_create(batch)
+            if len(batch) >= BATCH_WRITE:
+                Equipement.objects.bulk_create(batch, ignore_conflicts=True)
                 total += len(batch)
                 batch = []
-                self.stdout.write(f"  ... {total}")
+                self.stdout.write(f"  ... {total:,} équipements", ending="\r")
         if batch:
-            Equipement.objects.bulk_create(batch)
+            Equipement.objects.bulk_create(batch, ignore_conflicts=True)
             total += len(batch)
-        self.stdout.write(f"  {total} équipements importés ({skipped} ignorés sans coordonnées)")
+        self.stdout.write(f"\n  {total:,} équipements importés")

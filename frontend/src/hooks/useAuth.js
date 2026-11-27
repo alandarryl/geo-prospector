@@ -2,7 +2,7 @@
 // Les jetons sont dans localStorage ("access", "refresh") ; le refresh automatique
 // sur 401 est géré dans api.js, qui émet "auth:logout" s'il échoue.
 import { useCallback, useEffect, useState } from "react";
-import { apiSend, clearTokens, getTokens, setTokens } from "../api";
+import { apiGet, apiSend, clearTokens, getTokens, setTokens } from "../api";
 
 function storedUser() {
   const { access } = getTokens();
@@ -19,11 +19,27 @@ export function useAuth() {
     return () => window.removeEventListener("auth:logout", onLogout);
   }, []);
 
+  // Au démarrage : si un jeton est stocké, on vérifie qu'il est encore valide via /auth/me/
+  // (api.js le renouvelle si besoin, ou déclenche "auth:logout" s'il est mort)
+  useEffect(() => {
+    if (!getTokens().access) return;
+    apiGet("/auth/me/")
+      .then((me) => {
+        localStorage.setItem("username", me.username);
+        setUser(me);
+      })
+      .catch(() => {
+        /* 401 : déjà géré par api.js ; autre erreur (réseau) : on garde la session locale */
+      });
+  }, []);
+
   const login = useCallback(async (username, password) => {
     const tokens = await apiSend("POST", "/auth/token/", { username, password }, { auth: false });
     setTokens(tokens);
     localStorage.setItem("username", username);
     setUser({ username });
+    // Infos complètes (id, email, nombre d'implantations), sans bloquer la connexion
+    apiGet("/auth/me/").then(setUser).catch(() => {});
   }, []);
 
   const register = useCallback(

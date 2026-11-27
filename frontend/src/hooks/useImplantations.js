@@ -14,9 +14,11 @@ function toFeature(coordinates, properties) {
 export function useImplantations(user) {
   const [items, setItems] = useState([]);
   const [error, setError] = useState(null);
+  // On ne recharge que si l'utilisateur change vraiment (pas quand /auth/me/ complète ses infos)
+  const username = user?.username ?? null;
 
   useEffect(() => {
-    if (!user) {
+    if (!username) {
       setItems([]);
       return;
     }
@@ -27,7 +29,7 @@ export function useImplantations(user) {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [username]);
 
   const create = useCallback(async (coordinates, properties) => {
     const created = await apiSend("POST", "/implantations/", toFeature(coordinates, properties));

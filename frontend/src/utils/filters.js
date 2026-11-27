@@ -24,7 +24,7 @@ export function checkState(codes, selected) {
 /**
  * @param domaines arbre renvoyé par /api/domaines/
  * @param selectedTypes Set des codes de types cochés
- * @param communes [{code_insee, nom}]
+ * @param communes [{id, nom, departement, bbox}]
  * @returns objet de paramètres pour /api/equipements/
  */
 export function buildFilterParams(domaines, selectedTypes, communes) {
@@ -48,7 +48,7 @@ export function buildFilterParams(domaines, selectedTypes, communes) {
   if (domaine.length) params.domaine = domaine.join(",");
   if (sousDomaine.length) params.sous_domaine = sousDomaine.join(",");
   if (type.length) params.type = type.join(",");
-  if (communes.length) params.commune = communes.map((c) => c.code_insee).join(",");
+  if (communes.length) params.commune = communes.map((c) => c.id).join(",");
   return params;
 }
 

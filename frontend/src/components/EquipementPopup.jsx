@@ -43,20 +43,15 @@ export default function EquipementPopup({ id, domaineCode }) {
           <>
             <dt>Commune</dt>
             <dd>
-              {data.commune.nom} <small>({data.commune.code_insee})</small>
+              {data.code_postal ? `${data.code_postal} ` : ""}
+              {data.commune.nom} <small>({data.commune.departement})</small>
             </dd>
           </>
         )}
-        {data.annee && (
+        {data.siret && (
           <>
-            <dt>Année</dt>
-            <dd>{data.annee}</dd>
-          </>
-        )}
-        {data.qualite_geoloc && (
-          <>
-            <dt>Géolocalisation</dt>
-            <dd>{data.qualite_geoloc}</dd>
+            <dt>SIRET</dt>
+            <dd>{data.siret}</dd>
           </>
         )}
       </dl>
