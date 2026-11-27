@@ -70,6 +70,7 @@ button.link:hover { text-decoration: underline; }
 .pin { width: 24px; height: 24px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.4); margin-top: 1px; }
 .pin.implantation { background: #ea580c; }
 .pin.draft { background: #111827; animation: pulse 1.2s ease-in-out infinite; }
+.pin.address { background: #facc15; border-color: #111827; }
 .pin-mini { display: inline-block; width: 10px; height: 10px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: #ea580c; }
 @keyframes pulse { 50% { opacity: .6; } }
 
@@ -79,6 +80,7 @@ button.link:hover { text-decoration: underline; }
 .popup h4 { margin: 6px 0 8px; font-size: 15px; }
 .popup-tag { display: inline-block; padding: 2px 8px; border-radius: 10px; color: #fff; font-size: 11px; font-weight: 600; }
 .popup-tag.implantation { background: #ea580c; }
+.popup-tag.address { background: #a16207; }
 .popup dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; }
 .popup dt { color: #6b7280; }
 .popup dd { margin: 0; }

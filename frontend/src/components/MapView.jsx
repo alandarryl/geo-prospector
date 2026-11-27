@@ -99,10 +99,14 @@ export default function MapView({
   onEditImplantation,
   onDeleteImplantation,
   onMoveImplantation,
+  address,
+  canAddAtAddress,
+  onAddAtAddress,
+  onClearAddress,
 }) {
   const containerRef = useRef(null);
   const [map, setMap] = useState(null);
-  const [popup, setPopup] = useState(null); // {kind:"equipement"|"implantation", id, lngLat, domaine?}
+  const [popup, setPopup] = useState(null); // {kind:"equipement"|"implantation"|"adresse", id, lngLat, domaine?}
 
   // Dernières valeurs des props, lisibles depuis les handlers MapLibre (enregistrés une fois)
   const latest = useRef({});
@@ -219,6 +223,23 @@ export default function MapView({
     setPopup({ kind: "implantation", id: focus.feature.id, lngLat: coords });
   }, [map, focus]);
 
+  // ---------- Adresse géocodée : on s'y centre et on pose un repère ----------
+  useEffect(() => {
+    if (!map || !address) return;
+    const coords = address.coordinates;
+    const marker = new maplibregl.Marker({ element: markerElement("address"), anchor: "bottom" })
+      .setLngLat(coords)
+      .addTo(map);
+    marker.getElement().title = address.label;
+    marker.getElement().addEventListener("click", (e) => {
+      e.stopPropagation(); // ne pas déclencher le clic carte
+      setPopup({ kind: "adresse", lngLat: coords });
+    });
+    map.flyTo({ center: coords, zoom: Math.max(map.getZoom(), 17) });
+    setPopup({ kind: "adresse", lngLat: coords });
+    return () => marker.remove();
+  }, [map, address]);
+
   // ---------- Zoom sur les villes sélectionnées ----------
   const communeIds = communes.map((c) => c.id).join(",");
   useEffect(() => {
@@ -284,6 +305,38 @@ export default function MapView({
         createPortal(
           popup.kind === "equipement" ? (
             <EquipementPopup id={popup.id} domaineCode={popup.domaine} />
+          ) : popup.kind === "adresse" && address ? (
+            <div className="popup">
+              <div className="popup-tag address">Adresse</div>
+              <h4>{address.label}</h4>
+              <p className="hint">{address.context}</p>
+              {!address.context?.includes("Pays de la Loire") && (
+                <p className="hint">Hors région 52 : aucun équipement BPE n’est chargé ici.</p>
+              )}
+              <div className="actions">
+                {canAddAtAddress && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPopup(null);
+                      onAddAtAddress(address);
+                    }}
+                  >
+                    Implantation ici
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    setPopup(null);
+                    onClearAddress();
+                  }}
+                >
+                  Effacer
+                </button>
+              </div>
+            </div>
           ) : popupImplantation ? (
             <ImplantationPopup
               feature={popupImplantation}

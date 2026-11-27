@@ -1,6 +1,7 @@
 // Layout + état global : filtres, utilisateur, implantations.
 import { useEffect, useMemo, useState } from "react";
 import { fetchDomaines } from "./api";
+import AddressSearch from "./components/AddressSearch";
 import AuthPanel from "./components/AuthPanel";
 import FiltersPanel from "./components/FiltersPanel";
 import ImplantationForm from "./components/ImplantationForm";
@@ -32,6 +33,15 @@ export default function App() {
   const [addMode, setAddMode] = useState(false);
   const [draft, setDraft] = useState(null); // {id?, coordinates, titre, ...}
   const [focus, setFocus] = useState(null);
+
+  // Adresse géocodée affichée sur la carte : {label, coordinates:[lon,lat], context, t}
+  const [address, setAddress] = useState(null);
+
+  // Depuis le repère d'adresse : ouvre le formulaire d'implantation à cet endroit
+  function addImplantationAt(addr) {
+    setAddMode(false);
+    setDraft({ coordinates: addr.coordinates, annotations: `Adresse : ${addr.label}` });
+  }
 
   // Déconnexion : on ferme tout ce qui concerne les implantations
   useEffect(() => {
@@ -120,6 +130,8 @@ export default function App() {
           </section>
         )}
 
+        <AddressSearch onSelect={setAddress} />
+
         {domainesError && <p className="error">Domaines indisponibles : {domainesError}</p>}
         <FiltersPanel
           domaines={domaines}
@@ -138,6 +150,10 @@ export default function App() {
         addMode={addMode}
         draft={draft}
         focus={focus}
+        address={address}
+        canAddAtAddress={!!user && !draft}
+        onAddAtAddress={addImplantationAt}
+        onClearAddress={() => setAddress(null)}
         onPickLocation={(coordinates) => {
           setAddMode(false);
           setDraft({ coordinates });

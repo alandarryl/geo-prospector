@@ -142,3 +142,24 @@ export function fetchDomaines() {
 export function searchCommunes(q, signal) {
   return apiGet("/communes/", { q }, { signal });
 }
+
+// ---------- Géocodage d'adresses (service externe) ----------
+// Géoplateforme de l'IGN (ex « API Adresse » data.gouv.fr) : gratuit, sans clé,
+// adresses françaises, réponse GeoJSON en [lon, lat]. Appelé directement par le
+// navigateur (CORS ouvert), il ne passe donc pas par Django.
+const GEOCODER_URL = "https://data.geopf.fr/geocodage/search";
+const REGION_CENTER = { lon: -0.8, lat: 47.4 }; // Pays de la Loire : résultats proches en premier
+
+export async function geocodeAddress(q, signal) {
+  const params = new URLSearchParams({
+    q,
+    limit: "6",
+    autocomplete: "1",
+    lon: String(REGION_CENTER.lon),
+    lat: String(REGION_CENTER.lat),
+  });
+  const res = await fetch(`${GEOCODER_URL}?${params}`, { signal });
+  if (!res.ok) throw new Error(`Géocodage indisponible (${res.status})`);
+  const data = await res.json();
+  return data.features || [];
+}
