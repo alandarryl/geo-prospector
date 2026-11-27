@@ -24,7 +24,8 @@ const OSM_STYLE = {
   layers: [{ id: "osm", type: "raster", source: "osm" }],
 };
 
-const INITIAL_VIEW = { center: [0.1, 49.2], zoom: 11 }; // Normandie (région 28)
+// Pays de la Loire (région 52, groupe 4) : vue initiale centrée sur Nantes
+const INITIAL_VIEW = { center: [-1.5536, 47.2184], zoom: 11 };
 const SOURCE = "equipements";
 const CLICKABLE_LAYERS = ["clusters", "unclustered"];
 
