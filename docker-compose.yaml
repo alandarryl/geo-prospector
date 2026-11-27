@@ -1,0 +1,49 @@
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    container_name: bpe_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend            # image python + dépendances (le code n'est PAS copié)
+    container_name: bpe_backend
+    env_file: .env
+    volumes:
+      - ./backend:/app          # code en dehors du container
+      - ./data:/data            # fichier parquet BPE
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: python manage.py runserver 0.0.0.0:8000
+
+  frontend:
+    image: node:24-alpine       # Node sert uniquement à l'outillage React (Vite), pas de back Node
+    container_name: bpe_frontend
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules       # node_modules reste dans le container
+    environment:
+      VITE_PROXY_TARGET: http://backend:8000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+
+volumes:
+  pgdata:
