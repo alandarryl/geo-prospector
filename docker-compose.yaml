@@ -1,6 +1,8 @@
 services:
   db:
     image: postgis/postgis:17-3.5
+    # L'image n'existe qu'en amd64 : émulée sur Mac Apple Silicon (M1/M2/M3)
+    platform: linux/amd64
     container_name: bpe_db
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
