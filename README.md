@@ -81,3 +81,99 @@ docker compose exec db psql -U bpe -d bpe      # console SQL
 docker compose down                            # stop (garde les données)
 docker compose down -v                         # stop + supprime la base
 ```
+
+
+
+
+# Geo Prospector — BPE 2025 & Prospection
+
+Application cartographique web d'exploration de la Base permanente des équipements (BPE 2025, INSEE) et de prospection d'implantations commerciales, exécutée localement avec **Docker Compose** (aucune installation locale de Python ou Node.js requise).
+
+---
+
+## 1. Architecture et prérequis
+
+- **Backend & GeoAPI** : Python 3.13-slim, Django 6.1, Django REST Framework, `djangorestframework-gis`.
+- **Base de données spatiale** : PostgreSQL + PostGIS (conteneur `bpe_db`).
+- **Frontend** : application cartographique servie sur `http://localhost:5173` (avec proxy `/api` vers le backend sur `http://localhost:8000`).
+- **Prérequis unique** : **Docker Desktop** (ou Docker Engine + Docker Compose) démarré sur la machine.
+
+---
+
+## 2. Installation et démarrage en local
+
+1. **Cloner le dépôt et se placer sur la branche de travail** :
+   ```powershell
+   git clone <URL_DU_DEPOT> bpe-explorer
+   cd bpe-explorer
+   git checkout docs/back
+   ```
+
+2. **Préparer la configuration d'environnement (`.env`)** :
+   Si un fichier `.env.example` est présent, copie-le en `.env` (sinon vérifie les variables attendues par `docker-compose.yml` pour PostgreSQL/PostGIS et Django) :
+   ```powershell
+   if (Test-Path .env.example) { Copy-Item .env.example .env }
+   ```
+
+3. **Construire et démarrer les services Docker** :
+   ```powershell
+   docker compose up -d --build
+   docker compose ps
+   ```
+
+4. **Appliquer les migrations Django** :
+   ```powershell
+   docker compose exec backend python manage.py migrate
+   ```
+
+---
+
+## 3. Importation des données (BPE 2025 — Région 52)
+
+L'import s'appuie sur le fichier Parquet de la BPE 2025 filtré sur la région **Pays de la Loire (`BPE_REGION=52`, 142 580 lignes sources)** :
+
+1. **Télécharger / extraire le fichier Parquet dans le volume ou dossier prévu** (si ce n'est pas déjà fait dans l'environnement Docker).
+2. **Lancer la commande d'import** :
+   ```powershell
+   docker compose exec -e BPE_REGION=52 backend python manage.py import_bpe
+   ```
+3. **Vérifier l'import** (attendu : **136 569 équipements** et **1 228 communes** pour la région 52) :
+   ```powershell
+   docker compose exec backend python manage.py shell -c "from bpe.models import Equipement, Commune; print('Equipements:', Equipement.objects.count(), 'Communes:', Commune.objects.count())"
+   ```
+   Ou via l'endpoint de santé :
+   ```powershell
+   curl -s http://localhost:8000/api/health/
+   ```
+
+---
+
+## 4. Utilisation et vérification
+
+- **Application web** : `http://localhost:5173`
+- **API & Swagger UI** : `http://localhost:8000/api/docs/`
+- **Schéma OpenAPI** : `http://localhost:8000/api/schema/`
+- **Administration Django** : `http://localhost:8000/admin/`
+
+### Exécuter les tests backend
+
+```powershell
+docker compose exec backend python manage.py test
+```
+
+### Arrêter l'environnement local
+
+```powershell
+docker compose down
+```
+*(Utilise `docker compose down -v` uniquement si tu souhaites supprimer le volume de base de données et repartir de zéro.)*
+
+---
+
+## 5. Documentation détaillée
+
+- [Modèle de données (`docs/MODELE_DONNEES.md`)](docs/MODELE_DONNEES.md)
+- [Documentation de l'API (`docs/API.md`)](docs/API.md)
+
+
+
