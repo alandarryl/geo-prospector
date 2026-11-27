@@ -30,7 +30,7 @@ class DomaineArbreSerializer(serializers.ModelSerializer):
 class CommuneSerializer(serializers.ModelSerializer):
     class Meta:
         model = Commune
-        fields = ["code_insee", "nom", "departement"]
+        fields = ["id", "nom", "departement"]
 
 
 class EquipementGeoSerializer(GeoFeatureModelSerializer):
@@ -54,5 +54,5 @@ class EquipementDetailSerializer(GeoFeatureModelSerializer):
     class Meta:
         model = Equipement
         geo_field = "geom"
-        fields = ["id", "nom", "adresse", "type_equipement", "sous_domaine",
-                  "domaine", "commune", "qualite_geoloc", "annee"]
+        fields = ["id", "nom", "adresse", "code_postal", "siret", "type_equipement",
+                  "sous_domaine", "domaine", "commune"]

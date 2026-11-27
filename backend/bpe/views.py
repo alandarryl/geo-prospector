@@ -20,7 +20,7 @@ def _csv(request, name):
     OpenApiParameter("domaine", str, description="Codes domaines séparés par des virgules (ex: B,D)"),
     OpenApiParameter("sous_domaine", str, description="Codes sous-domaines (ex: B1,B2)"),
     OpenApiParameter("type", str, description="Codes types d'équipement (ex: B101,B102)"),
-    OpenApiParameter("commune", str, description="Codes INSEE des communes (ex: 76540,14118)"),
+    OpenApiParameter("commune", str, description="Identifiants des communes (ex: 12,57) — voir /api/communes/"),
 ])
 class EquipementViewSet(viewsets.ReadOnlyModelViewSet):
     """
@@ -69,7 +69,7 @@ class DomaineViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = None
 
 
-@extend_schema(parameters=[OpenApiParameter("q", str, description="Recherche par nom ou code INSEE")])
+@extend_schema(parameters=[OpenApiParameter("q", str, description="Recherche par nom de commune")])
 class CommuneViewSet(viewsets.ReadOnlyModelViewSet):
     """Communes de la région (autocomplétion du filtre villes)."""
     serializer_class = CommuneSerializer
@@ -78,5 +78,5 @@ class CommuneViewSet(viewsets.ReadOnlyModelViewSet):
         qs = Commune.objects.all()
         q = self.request.query_params.get("q")
         if q:
-            qs = qs.filter(Q(nom__icontains=q) | Q(code_insee__startswith=q))
+            qs = qs.filter(nom__icontains=q)
         return qs[:50]
