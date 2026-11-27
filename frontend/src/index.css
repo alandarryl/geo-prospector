@@ -1,5 +1,86 @@
 * { box-sizing: border-box; }
-html, body, #root { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+html, body, #root { margin: 0; height: 100%; font-family: system-ui, sans-serif; color: #111827; }
+
+/* ---------- Layout : sidebar 300px + carte ---------- */
 .layout { display: flex; height: 100%; }
-.sidebar { width: 300px; padding: 16px; overflow-y: auto; border-right: 1px solid #ddd; }
-.map { flex: 1; }
+.sidebar { width: 300px; flex-shrink: 0; padding: 16px; overflow-y: auto; border-right: 1px solid #ddd; background: #fafafa; }
+.sidebar h2 { margin: 0 0 12px; }
+.map-wrapper { flex: 1; position: relative; }
+.map { position: absolute; inset: 0; }
+
+/* ---------- Éléments communs ---------- */
+.panel { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e5e7eb; }
+.panel h3 { margin: 12px 0 6px; font-size: 14px; text-transform: uppercase; letter-spacing: .03em; color: #374151; }
+.panel-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.hint { font-size: 12px; color: #6b7280; margin: 4px 0; }
+.error { font-size: 13px; color: #b91c1c; margin: 4px 0; }
+input, select, textarea { width: 100%; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; font-size: 14px; background: #fff; }
+button { padding: 6px 12px; border: none; border-radius: 6px; background: #2563eb; color: #fff; font: inherit; font-size: 14px; cursor: pointer; }
+button:disabled { opacity: .6; cursor: default; }
+button.secondary { background: #e5e7eb; color: #111827; }
+button.danger { background: #dc2626; }
+button.link { background: none; color: #2563eb; padding: 0; text-align: left; }
+button.link:hover { text-decoration: underline; }
+.actions { display: flex; gap: 8px; margin-top: 8px; }
+
+/* ---------- Formulaires ---------- */
+.form { display: flex; flex-direction: column; gap: 8px; }
+.form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 500; }
+.tabs { display: flex; gap: 4px; }
+.tabs button { flex: 1; background: #e5e7eb; color: #374151; }
+.tabs button.active { background: #2563eb; color: #fff; }
+.auth { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; }
+
+/* ---------- Arbre des filtres ---------- */
+.tree, .tree ul { list-style: none; margin: 0; padding: 0; }
+.tree { margin-top: 8px; font-size: 13px; }
+.tree ul { padding-left: 18px; }
+.tree summary { display: flex; align-items: center; gap: 6px; padding: 3px 0; cursor: pointer; }
+.tree label { display: flex; align-items: center; gap: 6px; padding: 2px 0; cursor: pointer; }
+.tree input[type="checkbox"] { width: auto; margin: 0; }
+.tree small { color: #9ca3af; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+/* ---------- Villes ---------- */
+.commune-select { position: relative; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 8px; background: #dbeafe; border-radius: 12px; font-size: 13px; }
+.chip button { padding: 0 6px; background: none; color: #1e40af; font-size: 15px; line-height: 1; }
+.suggestions { position: absolute; z-index: 10; left: 0; right: 0; margin: 2px 0 0; padding: 0; list-style: none; background: #fff; border: 1px solid #d1d5db; border-radius: 6px; max-height: 240px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,.1); }
+.suggestions button { width: 100%; text-align: left; background: none; color: #111827; border-radius: 0; }
+.suggestions button:hover { background: #f3f4f6; }
+.suggestions small { color: #6b7280; }
+
+/* ---------- Liste des implantations ---------- */
+.implantation-list { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+.implantation-list li { display: flex; flex-direction: column; padding: 4px 0; }
+.implantation-list small { color: #6b7280; }
+
+/* ---------- Surcouches de la carte ---------- */
+.map-status { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; }
+.badge { padding: 6px 12px; border-radius: 16px; background: rgba(17, 24, 39, .85); color: #fff; font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
+.badge.light { background: rgba(255,255,255,.9); color: #374151; }
+.badge.add { background: #ea580c; }
+.badge.error { background: #b91c1c; }
+.legend { position: absolute; bottom: 30px; left: 10px; padding: 8px 10px; background: rgba(255,255,255,.92); border-radius: 6px; font-size: 12px; box-shadow: 0 2px 6px rgba(0,0,0,.15); display: flex; flex-direction: column; gap: 3px; }
+.legend div { display: flex; align-items: center; gap: 6px; }
+
+/* ---------- Repères des implantations ---------- */
+.marker { width: 26px; height: 34px; display: flex; justify-content: center; cursor: grab; }
+.pin { width: 24px; height: 24px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.4); margin-top: 1px; }
+.pin.implantation { background: #ea580c; }
+.pin.draft { background: #111827; animation: pulse 1.2s ease-in-out infinite; }
+.pin-mini { display: inline-block; width: 10px; height: 10px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: #ea580c; }
+@keyframes pulse { 50% { opacity: .6; } }
+
+/* ---------- Popups ---------- */
+.maplibregl-popup-content { padding: 12px 14px; border-radius: 8px; }
+.popup { font-size: 13px; min-width: 200px; }
+.popup h4 { margin: 6px 0 8px; font-size: 15px; }
+.popup-tag { display: inline-block; padding: 2px 8px; border-radius: 10px; color: #fff; font-size: 11px; font-weight: 600; }
+.popup-tag.implantation { background: #ea580c; }
+.popup dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; }
+.popup dt { color: #6b7280; }
+.popup dd { margin: 0; }
+.popup small { color: #9ca3af; }
+.pre { white-space: pre-wrap; }
