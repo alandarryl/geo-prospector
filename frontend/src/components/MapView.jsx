@@ -223,6 +223,9 @@ export default function MapView({
     setPopup({ kind: "implantation", id: focus.feature.id, lngLat: coords });
   }, [map, focus]);
 
+  // Adresse hors de la région importée (le géocodeur renvoie « 75, Paris, Île-de-France »)
+  const addressOutOfZone = !!address && !address.context?.includes("Pays de la Loire");
+
   // ---------- Adresse géocodée : on s'y centre et on pose un repère ----------
   useEffect(() => {
     if (!map || !address) return;
@@ -282,6 +285,7 @@ export default function MapView({
 
       <div className="map-status">
         {addMode && <span className="badge add">Cliquez sur la carte pour placer l'implantation</span>}
+        {addressOutOfZone && <span className="badge warn">⚠ Adresse hors zone : pas d’équipements BPE ici</span>}
         {status.zoomTooLow && <span className="badge">Zoomez pour voir les équipements</span>}
         {!status.zoomTooLow && status.loading && <span className="badge">Chargement…</span>}
         {!status.zoomTooLow && !status.loading && <span className="badge light">{status.count} équipements chargés</span>}
@@ -310,8 +314,11 @@ export default function MapView({
               <div className="popup-tag address">Adresse</div>
               <h4>{address.label}</h4>
               <p className="hint">{address.context}</p>
-              {!address.context?.includes("Pays de la Loire") && (
-                <p className="hint">Hors région 52 : aucun équipement BPE n’est chargé ici.</p>
+              {addressOutOfZone && (
+                <p className="alert">
+                  ⚠ Hors zone : cette adresse n’est pas en Pays de la Loire (région 52). Aucun équipement
+                  BPE n’est disponible ici.
+                </p>
               )}
               <div className="actions">
                 {canAddAtAddress && (
