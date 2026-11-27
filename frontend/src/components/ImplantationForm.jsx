@@ -1,8 +1,17 @@
 // Formulaire de création / édition d'une implantation.
 // draft = { id?, coordinates:[lon,lat], titre, type_envisage, annotations, commentaire }
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 export default function ImplantationForm({ draft, domaines, onSubmit, onCancel }) {
+  // Tous les types BPE à plat, triés par ordre alphabétique (accents gérés : « École » avec les E)
+  const types = useMemo(
+    () =>
+      (domaines || [])
+        .flatMap((d) => d.sous_domaines.flatMap((sd) => sd.types))
+        .sort((a, b) => a.libelle.localeCompare(b.libelle, "fr", { sensitivity: "base" })),
+    [domaines]
+  );
+
   const [values, setValues] = useState({
     titre: draft.titre || "",
     type_envisage: draft.type_envisage || "",
@@ -44,17 +53,11 @@ export default function ImplantationForm({ draft, domaines, onSubmit, onCancel }
         Type de commerce envisagé
         <select value={values.type_envisage} onChange={set("type_envisage")}>
           <option value="">— Non précisé —</option>
-          {(domaines || []).flatMap((d) =>
-            d.sous_domaines.map((sd) => (
-              <optgroup key={sd.code} label={`${d.libelle} › ${sd.libelle}`}>
-                {sd.types.map((t) => (
-                  <option key={t.code} value={t.code}>
-                    {t.libelle} ({t.code})
-                  </option>
-                ))}
-              </optgroup>
-            ))
-          )}
+          {types.map((t) => (
+            <option key={t.code} value={t.code}>
+              {t.libelle} ({t.code})
+            </option>
+          ))}
         </select>
       </label>
 
