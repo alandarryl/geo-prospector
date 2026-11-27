@@ -14,6 +14,7 @@ import unicodedata
 import pandas as pd
 import pyarrow.parquet as pq
 from django.conf import settings
+from django.contrib.gis.db.models import Extent
 from django.contrib.gis.geos import Point
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
@@ -67,6 +68,8 @@ class Command(BaseCommand):
         parser.add_argument("--region", default=settings.BPE_REGION, help="Code région INSEE (ex: 28)")
         parser.add_argument("--reset", action="store_true", help="Vide les tables BPE avant import")
         parser.add_argument("--inspect", action="store_true", help="Affiche colonnes, types et régions")
+        parser.add_argument("--emprises", action="store_true",
+                            help="Recalcule seulement l'emprise (bbox) des communes, sans réimporter")
 
     def handle(self, *args, **opts):
         path = opts["path"]
@@ -77,6 +80,9 @@ class Command(BaseCommand):
 
         if opts["inspect"]:
             return self._inspect(pfile)
+        if opts["emprises"]:
+            self._compute_emprises()
+            return
 
         missing = set(COLUMNS) - set(pfile.schema_arrow.names)
         if missing:
@@ -109,6 +115,7 @@ class Command(BaseCommand):
             self._import_nomenclature(df)
             communes = self._import_communes(df, REGIONS.get(code, code))
             self._import_equipements(df, communes)
+            self._compute_emprises()
 
         self.stdout.write(self.style.SUCCESS("Import terminé ✅"))
 
@@ -167,6 +174,16 @@ class Command(BaseCommand):
         mapping = {(c.nom, c.departement): c.id for c in Commune.objects.all()}
         self.stdout.write(f"  {len(pairs)} communes")
         return mapping
+
+    def _compute_emprises(self):
+        """Emprise [min_lon, min_lat, max_lon, max_lat] des équipements de chaque commune."""
+        extents = Equipement.objects.values("commune").annotate(ext=Extent("geom"))
+        by_id = {e["commune"]: [round(v, 6) for v in e["ext"]] for e in extents if e["ext"]}
+        communes = list(Commune.objects.all())
+        for c in communes:
+            c.bbox = by_id.get(c.id)
+        Commune.objects.bulk_update(communes, ["bbox"], batch_size=1000)
+        self.stdout.write(f"  emprise calculée pour {len(by_id)} communes")
 
     def _import_equipements(self, df, communes):
         batch, total = [], 0

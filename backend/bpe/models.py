@@ -13,6 +13,7 @@ Le fichier ne contient pas de code INSEE commune : une Commune est identifiée
 par (nom, département).
 """
 from django.contrib.gis.db import models
+from django.contrib.postgres.fields import ArrayField
 
 
 class Domaine(models.Model):
@@ -54,6 +55,9 @@ class Commune(models.Model):
     nom = models.CharField(max_length=255, db_index=True)
     departement = models.CharField(max_length=3, db_index=True)
     region = models.CharField(max_length=100)
+    # Emprise des équipements de la commune [min_lon, min_lat, max_lon, max_lat]
+    # (calculée à l'import, sert au front pour zoomer sur une ville)
+    bbox = ArrayField(models.FloatField(), size=4, null=True, blank=True)
 
     class Meta:
         ordering = ["nom"]

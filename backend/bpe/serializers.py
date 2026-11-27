@@ -28,9 +28,11 @@ class DomaineArbreSerializer(serializers.ModelSerializer):
 
 
 class CommuneSerializer(serializers.ModelSerializer):
+    nb_equipements = serializers.IntegerField(read_only=True)
+
     class Meta:
         model = Commune
-        fields = ["id", "nom", "departement"]
+        fields = ["id", "nom", "departement", "bbox", "nb_equipements"]
 
 
 class EquipementGeoSerializer(GeoFeatureModelSerializer):
@@ -44,12 +46,18 @@ class EquipementGeoSerializer(GeoFeatureModelSerializer):
         fields = ["id", "type_code", "domaine", "nom"]
 
 
+class CommuneCourteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Commune
+        fields = ["id", "nom", "departement"]
+
+
 class EquipementDetailSerializer(GeoFeatureModelSerializer):
     """Détail complet quand on clique sur un équipement."""
     type_equipement = TypeEquipementSerializer(read_only=True)
     sous_domaine = serializers.CharField(source="type_equipement.sous_domaine.libelle")
     domaine = serializers.CharField(source="type_equipement.sous_domaine.domaine.libelle")
-    commune = CommuneSerializer(read_only=True)
+    commune = CommuneCourteSerializer(read_only=True)
 
     class Meta:
         model = Equipement

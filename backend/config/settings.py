@@ -15,6 +15,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.postgres",
     "django.contrib.gis",
     # Tiers
     "rest_framework",
@@ -103,7 +104,9 @@ SPECTACULAR_SETTINGS = {
 }
 
 # Import BPE
-BPE_REGION = os.environ.get("BPE_REGION", "28")
+BPE_REGION = os.environ.get("BPE_REGION", "52")
 BPE_PARQUET_PATH = os.environ.get("BPE_PARQUET_PATH", "/data/bpe.parquet")
 # Nombre max d'équipements renvoyés par requête bbox (protection)
 BPE_MAX_FEATURES = 5000
+# Zoom minimum accepté pour /api/equipements/tuiles/{z}/{x}/{y}/
+BPE_MIN_TILE_ZOOM = 10
