@@ -220,23 +220,40 @@ export default function MapView({
   }, [map, focus]);
 
   // ---------- Zoom sur les villes sélectionnées ----------
-  const communeCodes = communes.map((c) => c.code_insee).join(",");
+  const communeIds = communes.map((c) => c.id).join(",");
   useEffect(() => {
-    if (!map || !communeCodes) return;
+    if (!map || !communes.length) return;
+
+    function fitTo(bounds) {
+      // On ne descend pas sous MIN_ZOOM, sinon plus rien ne s'afficherait
+      const cam = map.cameraForBounds(bounds, { padding: 60, maxZoom: 14 });
+      if (cam) map.easeTo({ ...cam, zoom: Math.max(cam.zoom, MIN_ZOOM) });
+    }
+
+    // Cas normal : le back fournit l'emprise de chaque commune, bbox = [minLon, minLat, maxLon, maxLat]
+    if (communes.every((c) => Array.isArray(c.bbox) && c.bbox.length === 4)) {
+      const bounds = new maplibregl.LngLatBounds();
+      communes.forEach((c) => {
+        bounds.extend([c.bbox[0], c.bbox[1]]);
+        bounds.extend([c.bbox[2], c.bbox[3]]);
+      });
+      fitTo(bounds);
+      return;
+    }
+
+    // Repli : emprise inconnue, on la déduit des équipements de ces villes
     const ctrl = new AbortController();
-    // On récupère les équipements des villes pour en déduire leur emprise
-    apiGet("/equipements/", { commune: communeCodes }, { signal: ctrl.signal })
+    apiGet("/equipements/", { commune: communeIds }, { signal: ctrl.signal })
       .then((data) => {
         if (!data.features.length) return;
         const bounds = new maplibregl.LngLatBounds();
         data.features.forEach((f) => bounds.extend(f.geometry.coordinates));
-        // On ne descend pas sous MIN_ZOOM, sinon plus rien ne s'afficherait
-        const cam = map.cameraForBounds(bounds, { padding: 60, maxZoom: 14 });
-        if (cam) map.easeTo({ ...cam, zoom: Math.max(cam.zoom, MIN_ZOOM) });
+        fitTo(bounds);
       })
       .catch((err) => err.name !== "AbortError" && console.error(err));
     return () => ctrl.abort();
-  }, [map, communeCodes]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, communeIds]);
 
   return (
     <div className="map-wrapper">

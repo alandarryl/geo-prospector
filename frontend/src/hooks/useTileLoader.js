@@ -50,7 +50,9 @@ export function useTileLoader(map, sourceId, filterParams) {
     async function loadRect(rect, signal, loaded) {
       const data = await fetchEquipements(rectToBBox(rect, TILE_ZOOM), paramsRef.current, signal);
       const single = rect.x0 === rect.x1 && rect.y0 === rect.y1;
-      if (data.features.length >= MAX_FEATURES && !single) {
+      // Le back peut signaler explicitement une réponse tronquée ("truncated": true)
+      const truncated = data.truncated ?? data.features.length >= MAX_FEATURES;
+      if (truncated && !single) {
         const [a, b] = splitRect(rect);
         await loadRect(a, signal, loaded);
         await loadRect(b, signal, loaded);

@@ -26,28 +26,28 @@ export default function CommuneSelect({ value, onChange }) {
     };
   }, [query]);
 
-  const selectedCodes = new Set(value.map((c) => c.code_insee));
+  const selectedIds = new Set(value.map((c) => c.id));
 
   function add(commune) {
-    if (!selectedCodes.has(commune.code_insee)) onChange([...value, commune]);
+    if (!selectedIds.has(commune.id)) onChange([...value, commune]);
     setQuery("");
     setResults([]);
   }
 
-  function remove(code) {
-    onChange(value.filter((c) => c.code_insee !== code));
+  function remove(id) {
+    onChange(value.filter((c) => c.id !== id));
   }
 
-  const suggestions = results.filter((c) => !selectedCodes.has(c.code_insee));
+  const suggestions = results.filter((c) => !selectedIds.has(c.id));
 
   return (
     <div className="commune-select">
       {value.length > 0 && (
         <div className="chips">
           {value.map((c) => (
-            <span key={c.code_insee} className="chip">
+            <span key={c.id} className="chip">
               {c.nom}
-              <button type="button" onClick={() => remove(c.code_insee)} aria-label={`Retirer ${c.nom}`}>
+              <button type="button" onClick={() => remove(c.id)} aria-label={`Retirer ${c.nom}`}>
                 ×
               </button>
             </span>
@@ -65,9 +65,9 @@ export default function CommuneSelect({ value, onChange }) {
       {open && suggestions.length > 0 && (
         <ul className="suggestions">
           {suggestions.map((c) => (
-            <li key={c.code_insee}>
+            <li key={c.id}>
               <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => add(c)}>
-                {c.nom} <small>({c.departement} · {c.code_insee})</small>
+                {c.nom} <small>({c.departement}{c.nb_equipements != null ? ` · ${c.nb_equipements} équip.` : ""})</small>
               </button>
             </li>
           ))}
