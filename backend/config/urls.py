@@ -3,10 +3,12 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+from config.views import health_view
 from prospection.views import RegisterView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("api/health/", health_view, name="health"),
     # Auth
     path("api/auth/register/", RegisterView.as_view(), name="register"),
     path("api/auth/token/", TokenObtainPairView.as_view(), name="token_obtain"),
