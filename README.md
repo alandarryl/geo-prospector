@@ -11,6 +11,14 @@ ses **implantations potentielles** (privées, réservées à l'utilisateur conne
 | BDD | PostgreSQL 17 + PostGIS 3.5 |
 | Infra | Docker / docker compose (code monté en volume, hors des images) |
 
+## Aperçu
+
+| Carte des équipements (chargement par tuiles, clusters) | Filtres par domaine et par ville |
+|---|---|
+| ![Carte des équipements autour de Nantes, regroupés en clusters](docs/captures/01-carte.jpg) | ![Filtre Commerces sur la ville de Nantes](docs/captures/02-filtres.jpg) |
+| **Détail d'un équipement au clic** | **Implantations et recherche d'adresse (connecté)** |
+| ![Fiche détail d'un commerce](docs/captures/03-detail.jpg) | ![Implantations de l'utilisateur et adresse géolocalisée](docs/captures/04-implantations-adresse.jpg) |
+
 ## Installation (local, reproductible)
 
 Prérequis : **Docker Desktop** (ou Docker Engine + compose v2) et **Git**.
@@ -72,6 +80,9 @@ Vérifier : http://localhost:8000/api/health/ doit renvoyer `"nb_equipements": 1
 - **Filtres** : arbre Domaine → Sous-domaine → Type (cocher un parent coche ses enfants) et une ou
   plusieurs villes (la carte zoome dessus). Aucune case cochée = tous les équipements.
 - **Détail** : clic sur un point.
+- **Adresse** : taper une adresse postale, choisir une suggestion ; la carte s'y centre avec un repère
+  (géocodage Géoplateforme IGN). Une alerte s'affiche si l'adresse est hors de la région 52.
+  Connecté, « Implantation ici » ouvre le formulaire à cet endroit.
 - **Implantations** : s'inscrire / se connecter, « + Ajouter », cliquer sur la carte, remplir le
   formulaire (titre, type envisagé, annotations, commentaire). Le repère se déplace à la souris ;
   modifier / supprimer depuis sa popup. Elles sont retrouvées à la connexion suivante.
